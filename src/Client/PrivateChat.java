@@ -1,71 +1,42 @@
 package Client;
 
 import Object.User;
+import Object.PrivateMessage;
 import Database.PrivateChatManager;
 import Database.UserManager;
 
 import javax.swing.*;
-import javax.swing.text.Style;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
+import java.sql.Timestamp;
+import java.util.Date;
 import java.util.List;
 
 public class PrivateChat extends JPanel {
-    private String username;
-    private JTextPane chatArea;
-    private JTextField messageField;
-    private JPanel userListPanel;
-    private UserManager userManager;
     private PrivateChatManager privateChatManager;
+    private UserManager userManager;
     private JLabel selectedUserLabel;
-    private JButton refreshUserButton;
-    private JLabel lastSelectedUserLabel = null;
-    public PrivateChat(String username) {
+    private JTextField messageField;
+    private JPanel filePanel;
+    private JPanel userListPanel; // Panel hiển thị danh sách người dùng
+    private String username;
+
+    private ChatClient chatClient;
+
+    public PrivateChat(String username, ChatClient chatClient) {
+        this.chatClient = chatClient;
         this.username = username;
         this.userManager = new UserManager();
         this.privateChatManager = new PrivateChatManager();
         setLayout(new BorderLayout());
 
-        // Phía bên trái: Danh sách người dùng và nút làm mới người dùng
-        userListPanel = new JPanel();
-        userListPanel.setLayout(new BoxLayout(userListPanel, BoxLayout.Y_AXIS));
-        userListPanel.setBackground(new Color(240, 240, 240));
-
-        // Thêm JLabel "Danh sách người dùng" ở trên cùng của userListPanel
-        JLabel userListLabel = new JLabel("Danh sách người dùng");
-        userListLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        userListLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        userListLabel.setPreferredSize(new Dimension(150, 30));
-        userListPanel.add(userListLabel);
-
-        // Nút làm mới danh sách người dùng
-        JButton refreshButton = new JButton("Làm mới");
-        refreshButton.setPreferredSize(new Dimension(100, 30));
-        refreshButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                updateUserList(userManager.getAllUsers());
-            }
-        });
-
-        // Thêm nút làm mới vào userListPanel dưới danh sách người dùng
-        userListPanel.add(refreshButton);
-
-        // Thêm các người dùng vào danh sách
-        JScrollPane userScroll = new JScrollPane(userListPanel);
-        userScroll.setPreferredSize(new Dimension(150, 0));
-        add(userScroll, BorderLayout.WEST);
+        // Phía bên trái: Danh sách người dùng
+        userListPanel = createUserListPanel();
+        add(userListPanel, BorderLayout.WEST);
 
         // Phía bên phải: Khung chat
-        JPanel chatPanel = new JPanel();
-        chatPanel.setLayout(new BorderLayout());
+        JPanel chatPanel = new JPanel(new BorderLayout());
 
         // Tên người dùng được chọn
         selectedUserLabel = new JLabel("Chat với: [Tên người dùng]");
@@ -73,277 +44,301 @@ public class PrivateChat extends JPanel {
         selectedUserLabel.setHorizontalAlignment(SwingConstants.CENTER);
         chatPanel.add(selectedUserLabel, BorderLayout.NORTH);
 
-        // Lịch sử chat
-        chatArea = new JTextPane();
-        chatArea.setEditable(false);
-        chatArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        JScrollPane chatScroll = new JScrollPane(chatArea);
-        chatPanel.add(chatScroll, BorderLayout.CENTER);
+        // Panel để hiển thị file đã gửi
+        filePanel = new JPanel();
+        filePanel.setLayout(new BoxLayout(filePanel, BoxLayout.Y_AXIS));
+        chatPanel.add(new JScrollPane(filePanel), BorderLayout.CENTER);
 
-        // Phía dưới: Khung nhập và các nút
-        JPanel inputPanel = new JPanel();
-        inputPanel.setLayout(new BorderLayout());
+        // Phía dưới: Nhập tin nhắn và nút gửi
+        JPanel inputPanel = new JPanel(new BorderLayout());
 
-        // Các nút gửi và các icon
-        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/Icon/clip.png"));
-        Image resizedImage = originalIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
-        ImageIcon resizedIcon = new ImageIcon(resizedImage);
-        JButton sendFileButton = new JButton(resizedIcon);
-        sendFileButton.setPreferredSize(new Dimension(40, 40));
-        sendFileButton.setToolTipText("Gửi File");
+        JButton sendFileButton = createIconButton("/Icon/clip.png", "Gửi File");
+        JButton emojiButton = createIconButton("/Icon/emoji.png", "Chọn Emoji");
+        JButton sendButton = createIconButton("/Icon/send_mess.png", "Gửi Tin Nhắn");
 
-        ImageIcon originalEmojiIcon = new ImageIcon(getClass().getResource("/Icon/emoji.png"));
-        Image resizedEmojiImage = originalEmojiIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
-        ImageIcon resizedEmojiIcon = new ImageIcon(resizedEmojiImage);
-        JButton emojiButton = new JButton(resizedEmojiIcon);
-        emojiButton.setPreferredSize(new Dimension(40, 40));
-        emojiButton.setToolTipText("Chọn Emoji");
-
-        ImageIcon originalSendIcon = new ImageIcon(getClass().getResource("/Icon/send_mess.png"));
-        Image resizedSendImage = originalSendIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
-        ImageIcon resizedSendIcon = new ImageIcon(resizedSendImage);
-        JButton sendButton = new JButton(resizedSendIcon);
-        sendButton.setPreferredSize(new Dimension(40, 40));
-        sendButton.setToolTipText("Gửi Tin Nhắn");
-
-        // Tạo JPanel cho các nút
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
+        // Panel chứa các nút
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttonPanel.add(sendFileButton);
         buttonPanel.add(emojiButton);
         buttonPanel.add(sendButton);
 
-        // Trường nhập văn bản
         messageField = new JTextField();
         messageField.setPreferredSize(new Dimension(300, 30));
-        Font font = new Font("Arial", Font.PLAIN, 16);
-        messageField.setFont(font);
-
-        // Thêm các thành phần vào inputPanel
+        messageField.setFont(new Font("Arial", Font.PLAIN, 16));
         inputPanel.add(buttonPanel, BorderLayout.WEST);
         inputPanel.add(messageField, BorderLayout.CENTER);
 
         chatPanel.add(inputPanel, BorderLayout.SOUTH);
-
         add(chatPanel, BorderLayout.CENTER);
 
-        // Sự kiện cho nút gửi tin nhắn
-        sendButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
+        // Sự kiện nút
+        sendButton.addActionListener(e -> {
+            try {
                 sendMessage();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
             }
         });
-
-        // Sự kiện cho nút gửi file
-        sendFileButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                sendFile();
-            }
-        });
-
-        // Sự kiện cho nút gửi emoji
-        emojiButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
+        sendFileButton.addActionListener(e -> sendFile());
+        emojiButton.addActionListener(e -> {
+            try {
                 sendEmoji();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
             }
         });
 
-        // Cập nhật danh sách người dùng ban đầu
-        updateUserList(userManager.getAllUsers());
+        // Cập nhật danh sách người dùng
+        updateUserList();
     }
 
-    // Hàm gửi tin nhắn
-    private void sendMessage() {
-        String message = messageField.getText();
-        if (message != null && !message.trim().isEmpty()) {
-            String selectedUser = selectedUserLabel.getText().replace("Chat với: ", "");
-            if (privateChatManager.sendMessage(username, selectedUser, message, "", false)) {
-                appendMessage("Bạn: " + message, Color.PINK); // Màu hồng cho người gửi
-                displayChatHistory(selectedUser); // Cập nhật lại lịch sử chat sau khi gửi tin nhắn
-            }
-            messageField.setText("");
-        }
-    }
+    private JPanel createUserListPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(new Color(240, 240, 240));
 
-    // Hàm gửi file
-// Hàm gửi file
-    private void sendFile() {
-        JFileChooser fileChooser = new JFileChooser();
-        int returnValue = fileChooser.showOpenDialog(null);
-        if (returnValue == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            String selectedUser = selectedUserLabel.getText().replace("Chat với: ", "");
-            String filePath = file.getAbsolutePath();
-
-            // Hiển thị tiến trình gửi file
-            SwingWorker<Void, Void> fileSendWorker = new SwingWorker<>() {
-                @Override
-                protected Void doInBackground() throws Exception {
-                    String message = "Đã gửi file: " + file.getName();
-                    if (privateChatManager.sendMessage(username, selectedUser, message, filePath, false)) {
-                        appendMessage("Bạn đã gửi file: " + file.getName(), Color.PINK);
-                        displayChatHistory(selectedUser);
-                    }
-                    return null;
-                }
-
-                @Override
-                protected void done() {
-                    JOptionPane.showMessageDialog(null, "Gửi file thành công!");
-                }
-            };
-            fileSendWorker.execute();
-        }
-    }
-
-    // Hàm gửi emoji
-    private void sendEmoji() {
-        // Tạo danh sách emoji
-        String[] emojis = {"😊", "😂", "😍", "👍", "❤️", "😢"};
-        String selectedEmoji = (String) JOptionPane.showInputDialog(
-                this,
-                "Chọn một emoji:",
-                "Gửi Emoji",
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                emojis,
-                emojis[0]
-        );
-
-        if (selectedEmoji != null) {
-            String selectedUser = selectedUserLabel.getText().replace("Chat với: ", "");
-            // Gửi emoji như tin nhắn
-            if (privateChatManager.sendMessage(username, selectedUser, selectedEmoji, null, true)) {
-                appendMessage(username + " đã gửi emoji: " + selectedEmoji, Color.YELLOW);
-                displayChatHistory(selectedUser);
-            }
-        }
-    }
-
-    // Hàm nhận tin nhắn
-    public void receiveMessage(String message) {
-        if (message != null && !message.trim().isEmpty()) {
-            if (message.startsWith("Đã gửi file: ")) {
-                String fileName = message.replace("Đã gửi file: ", "");
-                appendFileMessage("Người khác đã gửi file: " + fileName, Color.BLUE);
-            } else if (message.startsWith("Emoji: ")) {
-                String emoji = message.replace("Emoji: ", "");
-                appendMessage("Người khác đã gửi emoji: " + emoji, Color.BLUE);
-            } else {
-                appendMessage("Người khác: " + message, Color.BLUE);
-            }
-            String selectedUser = selectedUserLabel.getText().replace("Chat với: ", "");
-            displayChatHistory(selectedUser);
-        }
-    }
-
-    // Hàm thêm liên kết file vào JTextPane
-    private void appendFileMessage(String message, Color color) {
-        StyledDocument doc = chatArea.getStyledDocument();
-        Style style = chatArea.addStyle("Style", null);
-        StyleConstants.setForeground(style, color);
-        try {
-            doc.insertString(doc.getLength(), message + " ", style);
-            JButton openFileButton = new JButton("Mở file");
-            openFileButton.setForeground(Color.BLUE);
-            openFileButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            openFileButton.addActionListener(e -> {
-                String filePath = message.replace("Người khác đã gửi file: ", "").trim();
-                openFile(filePath);
-            });
-            chatArea.insertComponent(openFileButton);
-            doc.insertString(doc.getLength(), "\n", null); // Xuống dòng sau nút
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // Hàm mở file
-    private void openFile(String filePath) {
-        try {
-            File file = new File(filePath);
-            if (file.exists()) {
-                Desktop.getDesktop().open(file);
-            } else {
-                JOptionPane.showMessageDialog(null, "File không tồn tại hoặc không thể mở!");
-            }
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(null, "Có lỗi xảy ra khi mở file!");
-            e.printStackTrace();
-        }
-    }
-
-    // Hàm thêm tin nhắn vào JTextPane với màu sắc
-    private void appendMessage(String message, Color color) {
-        StyledDocument doc = chatArea.getStyledDocument();
-        Style style = chatArea.addStyle("Style", null);
-        StyleConstants.setForeground(style, color);
-        try {
-            doc.insertString(doc.getLength(), message + "\n", style);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    // Cập nhật lịch sử chat khi người dùng chọn người khác để chat
-    private void displayChatHistory(String selectedUser) {
-        List<String> chatHistory = privateChatManager.getChatHistory(username, selectedUser);
-        chatArea.setText(""); // Xóa nội dung cũ trong chatArea
-        for (String message : chatHistory) {
-            appendMessage(message, Color.BLACK); // Hiển thị các tin nhắn trong lịch sử
-        }
-    }
-
-    // Cập nhật danh sách người dùng trong giao diện
-    private void updateUserList(List<User> users) {
-        userListPanel.removeAll();
-
-        // Thêm lại JLabel "Danh sách người dùng"
+        // Tiêu đề "Danh sách người dùng"
         JLabel userListLabel = new JLabel("Danh sách người dùng");
         userListLabel.setFont(new Font("Arial", Font.BOLD, 14));
         userListLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        userListLabel.setPreferredSize(new Dimension(150, 30));
+        panel.add(userListLabel);
+
+        // Nút làm mới
+        JButton refreshButton = new JButton("Làm mới");
+        refreshButton.addActionListener(e -> updateUserList());
+        panel.add(refreshButton);
+
+        return panel;
+    }
+
+    private void updateUserList() {
+        // Lấy danh sách tất cả người dùng từ UserManager
+        java.util.List<User> users = userManager.getAllUsers();
+
+        // Lấy tên người dùng hiện tại
+        String currentUsername = username; // Sử dụng username đã truyền vào
+
+        // Lọc danh sách để loại bỏ người dùng hiện tại
+        users.removeIf(user -> user.getUsername().equals(currentUsername));
+
+        // Xóa tất cả các thành phần hiện tại khỏi panel danh sách người dùng
+        JPanel userListPanel = (JPanel) getComponent(0);
+        userListPanel.removeAll();
+
+        // Thêm tiêu đề "Danh sách người dùng"
+        JLabel userListLabel = new JLabel("Danh sách người dùng");
+        userListLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        userListLabel.setHorizontalAlignment(SwingConstants.CENTER);
         userListPanel.add(userListLabel);
 
-        // Thêm các người dùng vào danh sách, loại trừ người dùng hiện tại
+        // Thêm nút "Làm mới"
+        JButton refreshButton = new JButton("Làm mới");
+        refreshButton.setPreferredSize(new Dimension(100, 30));
+        refreshButton.addActionListener(e -> updateUserList());
+        userListPanel.add(refreshButton);
+
+        // Thêm danh sách người dùng
         for (User user : users) {
-            if (!user.getUsername().equals(username)) {
-                JLabel userLabel = new JLabel(user.getUsername());
-                userLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-                userLabel.setPreferredSize(new Dimension(150, 30));
-                userLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            JLabel userLabel = new JLabel(user.getUsername());
+            userLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+            userLabel.setPreferredSize(new Dimension(120, 30));
+            userLabel.setHorizontalAlignment(SwingConstants.LEFT);
 
-                userLabel.addMouseListener(new MouseAdapter() {
-                    @Override
-                    public void mouseClicked(MouseEvent e) {
-                        // Hiển thị người dùng đã chọn
-                        selectedUserLabel.setText("Chat với: " + user.getUsername());
-                        displayChatHistory(user.getUsername());
+            // Thêm sự kiện click vào JLabel
+            userLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    selectUser(user, userLabel);
+                }
+            });
 
-                        // Đổi font của tên người dùng thành in đậm khi chọn
-                        if (lastSelectedUserLabel != null) {
-                            // Đặt lại font của người dùng trước đó về bình thường
-                            lastSelectedUserLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-                        }
+            userListPanel.add(userLabel);
+        }
 
-                        // Đặt font của người dùng hiện tại thành in đậm
-                        userLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        // Làm mới lại giao diện
+        userListPanel.revalidate();
+        userListPanel.repaint();
+    }
 
-                        // Cập nhật lại người dùng đã chọn
-                        lastSelectedUserLabel = userLabel;
-                    }
-                });
-
-                userListPanel.add(userLabel);
+    private void selectUser(User user, JLabel userLabel) {
+        // Đặt tất cả nhãn trở về font thường
+        JPanel userListPanel = (JPanel) getComponent(0);
+        for (Component component : userListPanel.getComponents()) {
+            if (component instanceof JLabel && !((JLabel) component).getText().equals("Danh sách người dùng")) {
+                component.setFont(new Font("Arial", Font.PLAIN, 14));
             }
         }
 
+        // Đặt nhãn của người dùng được chọn in đậm
+        userLabel.setFont(new Font("Arial", Font.BOLD, 14));
+
+        // Cập nhật nhãn "Chat với"
+        selectedUserLabel.setText("Chat với: " + user.getUsername());
+//        System.out.println("Đã chọn người dùng: " + user.getUsername());
+
+        // Lấy lịch sử chat giữa người dùng hiện tại và người được chọn
+        List<PrivateMessage> messages = privateChatManager.getMessages(username, user.getUsername());
+
+        // Hiển thị lịch sử chat
+        displayMessages(messages);
+    }
+    private void displayMessages(List<PrivateMessage> messages) {
+        filePanel.removeAll();
+
+        for (PrivateMessage message : messages) {
+            if (message.getFilePath() != null && !message.getFilePath().isEmpty()) {
+                displayFile(new File(message.getFilePath()));
+            } else {
+                JPanel messagePanel = createMessageLabel(message);
+                filePanel.add(messagePanel);
+            }
+        }
+
+        // Update the UI
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+    private JPanel createMessageLabel(PrivateMessage message) {
+        JPanel messagePanel = new JPanel();
+        messagePanel.setLayout(new BorderLayout());
+
+        String timeStamp = message.getTimestamp().toString();
+
+        String displayText;
+        if (message.isEmoji()) {
+            displayText = String.format("<html><b>%s</b>: <img src='/path/to/emoji.png' width='10' height='10'> [%s]</html>",
+                    message.getSender(), timeStamp); // Adjust emoji path as necessary
+        } else {
+            displayText = String.format("<html><b>%s</b>: %s [%s]</html>",
+                    message.getSender(), message.getMessage(), timeStamp);
+        }
+
+        // Create a JLabel for the message text
+        JLabel label = new JLabel(displayText);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
+
+        messagePanel.add(label, BorderLayout.WEST);
+        messagePanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); // Add padding around the message
+
+        return messagePanel;
+    }
+    private JButton createIconButton(String iconPath, String tooltip) {
+        ImageIcon originalIcon = new ImageIcon(getClass().getResource(iconPath));
+        Image resizedImage = originalIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
+        return new JButton(new ImageIcon(resizedImage)) {{
+            setToolTipText(tooltip);
+            setPreferredSize(new Dimension(40, 40));
+        }};
+    }
+
+    private void sendMessage() throws IOException {
+//        String message = messageField.getText();
+//        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+//
+//        if (!message.isEmpty() && !recipient.isEmpty()) {
+//            // Gửi tin nhắn và nhận phản hồi từ server
+//            String response = chatClient.sendMessage(username, recipient, message);
+//            if (response.equals("SUCCESS")) {
+//                // Nếu phản hồi từ server là thành công, hiển thị tin nhắn
+//                displaySentMessage(message);
+//            } else {
+//                JOptionPane.showMessageDialog(this, "Gửi tin nhắn thất bại");
+//            }
+//            messageField.setText(""); // Xóa trường nhập
+//        }
+    }
+
+    private void sendFile() {
+//        JFileChooser fileChooser = new JFileChooser();
+//        int returnValue = fileChooser.showOpenDialog(this);
+//        if (returnValue == JFileChooser.APPROVE_OPTION) {
+//            File selectedFile = fileChooser.getSelectedFile();
+//            String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+//
+//            try {
+//                // Gửi file và nhận phản hồi từ server
+//                String response = chatClient.sendFile(username, recipient, selectedFile);
+//                if (response.equals("SUCCESS")) {
+//                    displayFile(selectedFile); // Hiển thị file trong UI
+//                } else {
+//                    JOptionPane.showMessageDialog(this, "Gửi file thất bại");
+//                }
+//            } catch (IOException e) {
+//                e.printStackTrace();
+//            }
+//        }
+    }
+
+    private void sendEmoji() throws IOException {
+//        String emoji = "😊";
+//        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+//
+//        // Gửi emoji và nhận phản hồi từ server
+//        String response = chatClient.sendEmoji(username, recipient, emoji);
+//        if (response.equals("SUCCESS")) {
+//            // Hiển thị emoji
+//            displayEmoji(emoji);
+//        } else {
+//            JOptionPane.showMessageDialog(this, "Gửi emoji thất bại");
+//        }
+    }
+    private void displaySentMessage(String message) {
+        // Khởi tạo đối tượng PrivateMessage với timestamp và các thông tin cần thiết
+        PrivateMessage sentMessage = new PrivateMessage(
+                0,  // chatId, bạn có thể thay đổi hoặc gán giá trị này tùy vào logic của bạn
+                username,  // sender
+                selectedUserLabel.getText().replace("Chat với: ", ""),  // receiver (được lấy từ giao diện)
+                message,  // message
+                new Timestamp(System.currentTimeMillis()),  // timestamp
+                null,  // filePath (trong trường hợp không có file)
+                false  // isEmoji (false nếu đây là tin nhắn văn bản)
+        );
+
+        // Tạo panel để hiển thị tin nhắn
+        JPanel messagePanel = createMessageLabel(sentMessage);
+        filePanel.add(messagePanel);
+
         // Cập nhật lại giao diện
-        userListPanel.revalidate();
-        userListPanel.repaint();
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+
+    private void displayEmoji(String emoji) {
+        // Khởi tạo đối tượng PrivateMessage với emoji và các thông tin cần thiết
+        PrivateMessage emojiMessage = new PrivateMessage(
+                0,  // chatId, bạn có thể thay đổi hoặc gán giá trị này tùy vào logic của bạn
+                username,  // sender
+                selectedUserLabel.getText().replace("Chat với: ", ""),  // receiver
+                emoji,  // message
+                new Timestamp(System.currentTimeMillis()),  // timestamp
+                null,  // filePath (trong trường hợp không có file)
+                true  // isEmoji (true nếu đây là emoji)
+        );
+
+        // Tạo panel để hiển thị emoji
+        JPanel emojiPanel = createMessageLabel(emojiMessage);
+        filePanel.add(emojiPanel);
+
+        // Cập nhật lại giao diện
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+    private void displayFile(File file) {
+        JPanel fileEntry = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel fileNameLabel = new JLabel(file.getName());
+        JButton downloadButton = new JButton("Tải về");
+        downloadButton.addActionListener(e -> downloadFile(file));
+        fileEntry.add(fileNameLabel);
+        fileEntry.add(downloadButton);
+        filePanel.add(fileEntry);
+
+        // Cập nhật lại giao diện
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+
+    private void downloadFile(File file) {
+        JOptionPane.showMessageDialog(this, "Tải về: " + file.getAbsolutePath());
     }
 
 }
