@@ -161,7 +161,6 @@ public class ChatPrivateManagerPanel extends JPanel {
     }
 
     // Tải tin nhắn từ cơ sở dữ liệu
-// Tải tin nhắn từ cơ sở dữ liệu
     private void loadMessages(String sender, String receiver, String content) {
         tableModel.setRowCount(0); // Xóa dữ liệu cũ
 

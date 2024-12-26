@@ -6,6 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 
 public class MainUI {
     private JFrame frame;
@@ -13,9 +14,11 @@ public class MainUI {
     private JTextField queryField;
     private JTextArea resultArea;
     private JButton accessButton;
+    private ChatClient chatClient;
 
     public MainUI(String username) {
         this.username = username;
+        chatClient = new ChatClient("localhost", 12345, username); // Địa chỉ và cổng server
         createUI();
     }
 
@@ -43,11 +46,10 @@ public class MainUI {
         frame.add(headerPanel, BorderLayout.NORTH);
 
         JTabbedPane tabbedPane = new JTabbedPane();
-
-        JPanel privateChat = new PrivateChat(username);
+        PrivateChat privateChat = new PrivateChat(username, chatClient);
         tabbedPane.addTab("Chat Inbox", privateChat);
 
-        JPanel groupChat = new GroupChat(username);
+        GroupChat groupChat = new GroupChat(username, chatClient);
         tabbedPane.addTab("Chat Nhóm", groupChat);
 
         JPanel logoutPanel = new JPanel();

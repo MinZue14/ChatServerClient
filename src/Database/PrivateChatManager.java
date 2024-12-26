@@ -9,10 +9,12 @@ public class PrivateChatManager {
 
     // Gửi tin nhắn
     public boolean sendMessage(String sender, String receiver, String message, String filePath, boolean isEmoji) {
-        int chatId = getNextChatId();  // Lấy ID chat tiếp theo
+        int chatId = getNextChatId(); // Lấy ID chat tiếp theo
 
+        // Query để lưu tin nhắn vào CSDL
         String query = "INSERT INTO private_chats (chat_id, sender, receiver, message, file_path, is_emoji) " +
                 "VALUES (?, ?, ?, ?, ?, ?)";
+
         try (PreparedStatement stmt = Database.getConnection().prepareStatement(query)) {
             stmt.setInt(1, chatId);
             stmt.setString(2, sender);
@@ -29,13 +31,12 @@ public class PrivateChatManager {
             stmt.setBoolean(6, isEmoji); // Chỉ ra nếu là emoji
 
             stmt.executeUpdate();
-            return true;
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
-        return false;
+        return true;
     }
-
 
     private int getNextChatId() {
         String query = "SELECT MAX(chat_id) AS max_id FROM private_chats";
@@ -49,7 +50,6 @@ public class PrivateChatManager {
         }
         return 1; // Nếu bảng trống, bắt đầu từ 1
     }
-
     // Lấy tất cả tin nhắn giữa hai người dùng
     public List<PrivateMessage> getMessages(String sender, String receiver) {
         List<PrivateMessage> messages = new ArrayList<>();
@@ -88,37 +88,7 @@ public class PrivateChatManager {
         return messages;
     }
 
-    // Xóa một tin nhắn theo chat_id
-    public boolean deleteMessage(int chatId) {
-        String query = "DELETE FROM private_chats WHERE chat_id = ?";
-        try (PreparedStatement stmt = Database.getConnection().prepareStatement(query)) {
-            stmt.setInt(1, chatId);
-            stmt.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-
-    // Lấy chi tiết một tin nhắn cụ thể
-    public String getMessageById(int chatId) {
-        String query = "SELECT message, timestamp FROM private_chats WHERE chat_id = ?";
-        try (PreparedStatement stmt = Database.getConnection().prepareStatement(query)) {
-            stmt.setInt(1, chatId);
-            ResultSet resultSet = stmt.executeQuery();
-            if (resultSet.next()) {
-                String message = resultSet.getString("message");
-                Timestamp timestamp = resultSet.getTimestamp("timestamp");
-                return "[" + timestamp + "] " + message;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    // Lấy lịch sử nhắn tin giữa hai người dùng
+    // Thay đổi phương thức lấy lịch sử nhắn tin để bao gồm thời gian
     public List<String> getChatHistory(String username1, String username2) {
         List<String> chatHistory = new ArrayList<>();
         String query = "SELECT sender, message, timestamp " +
@@ -135,35 +105,26 @@ public class PrivateChatManager {
                 String sender = resultSet.getString("sender");
                 String message = resultSet.getString("message");
                 Timestamp timestamp = resultSet.getTimestamp("timestamp");
-                chatHistory.add("[" + timestamp + "] " + sender + ": " + message);
+                chatHistory.add(sender + ": " + message + " [" + timestamp + "]");
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return chatHistory;
     }
-    public List<String> searchMessagesBetweenUsers(String username1, String username2, String keyword) {
-        List<String> messages = new ArrayList<>();
-        String query = "SELECT message, timestamp FROM private_chats " +
-                "WHERE ((sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)) " +
-                "AND message LIKE ? ORDER BY timestamp";
+    // Xóa một tin nhắn theo chat_id
+    public boolean deleteMessage(int chatId) {
+        String query = "DELETE FROM private_chats WHERE chat_id = ?";
         try (PreparedStatement stmt = Database.getConnection().prepareStatement(query)) {
-            stmt.setString(1, username1);
-            stmt.setString(2, username2);
-            stmt.setString(3, username2);
-            stmt.setString(4, username1);
-            stmt.setString(5, "%" + keyword + "%");
-            ResultSet resultSet = stmt.executeQuery();
-            while (resultSet.next()) {
-                String message = resultSet.getString("message");
-                Timestamp timestamp = resultSet.getTimestamp("timestamp");
-                messages.add("[" + timestamp + "] " + message);
-            }
+            stmt.setInt(1, chatId);
+            stmt.executeUpdate();
+            return true;
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return messages;
+        return false;
     }
+
     // Lấy tin nhắn với bộ lọc linh hoạt
     public List<PrivateMessage> getMessagesFiltered(String sender, String receiver, String content) {
         List<PrivateMessage> messages = new ArrayList<>();

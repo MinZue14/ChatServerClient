@@ -1,152 +1,152 @@
 package Server;
 
-import Database.*;
+import Database.PrivateChatManager;
 
+import java.awt.*;
 import java.io.*;
 import java.net.Socket;
 
 public class ClientHandler implements Runnable {
-    private final Socket clientSocket;
-    private BufferedReader reader;
-    private BufferedWriter writer;
+    private Socket clientSocket;
+    private BufferedReader in;
+    private PrintWriter out;
+    private ServerUI serverUI;
     private String username;
-    private final UserManager userManager;
-    private final PrivateChatManager privateChatManager;
-    private final GroupChatManager groupChatManager;
-    private final GroupManager groupManager;
-    private final GroupMemberManager groupMemberManager;
 
-    public ClientHandler(Socket clientSocket) {
+    public ClientHandler(Socket clientSocket, ServerUI serverUI) {
         this.clientSocket = clientSocket;
-        this.userManager = new UserManager();
-        this.privateChatManager = new PrivateChatManager();
-        this.groupChatManager = new GroupChatManager();
-        this.groupManager = new GroupManager();
-        this.groupMemberManager = new GroupMemberManager();
-
-        try {
-            reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            writer = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
-        } catch (IOException e) {
-            System.err.println("Lỗi khi thiết lập kết nối với client: " + e.getMessage());
-        }
+        this.serverUI = serverUI;
     }
 
     @Override
     public void run() {
         try {
-            // Xác thực người dùng
-            authenticateUser();
+            // Thiết lập các luồng vào ra cho kết nối client
+            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            out = new PrintWriter(clientSocket.getOutputStream(), true);
 
-            // Lắng nghe và xử lý yêu cầu từ client
-            String request;
-            while ((request = reader.readLine()) != null) {
-                handleRequest(request);
-            }
-        } catch (IOException e) {
-            System.err.println("Lỗi trong quá trình giao tiếp: " + e.getMessage());
-        } finally {
-            closeConnection();
-        }
-    }
-
-    private void authenticateUser() throws IOException {
-        writer.write("Vui lòng đăng nhập (username:password):\n");
-        writer.flush();
-
-        String credentials = reader.readLine();
-        if (credentials != null) {
-            String[] parts = credentials.split(":");
-            if (parts.length == 2 && userManager.authenticateUser(parts[0], parts[1])) {
-                username = parts[0];
-                writer.write("Đăng nhập thành công!\n");
-                writer.flush();
-                return;
-            }
-        }
-        writer.write("Đăng nhập thất bại! Đóng kết nối...\n");
-        writer.flush();
-        closeConnection();
-    }
-
-    private void handleRequest(String request) throws IOException {
-        if (request.startsWith("MESSAGE")) {
-            handleMessage(request);
-        } else if (request.startsWith("SEND_FILE")) {
-            handleFile(request);
-        } else if (request.startsWith("EMOJI")) {
-            handleEmoji(request);
-        } else if (request.startsWith("GROUP_CHAT")) {
-            handleGroupChat(request);
-        } else {
-            writer.write("Yêu cầu không hợp lệ!\n");
-            writer.flush();
-        }
-    }
-
-    private void handleMessage(String request) throws IOException {
-        String[] parts = request.split(" ", 4);  // Chỉnh sửa để có thể nhận thêm filePath và isEmoji.
-        if (parts.length >= 3) {
-            String receiver = parts[1];
-            String message = parts[2];
-            String filePath = null;
-            boolean isEmoji = false;
-
-            // Nếu yêu cầu có file (được giả định là "SEND_FILE <file_path>"), xử lý phần này
-            if (parts.length >= 4 && parts[2].equals("SEND_FILE")) {
-                filePath = parts[3];  // Lấy đường dẫn file từ yêu cầu
-                message = "";  // Không cần tin nhắn, chỉ gửi file
-            }
-
-            // Kiểm tra xem có phải gửi emoji hay không
-            if (message.equals("EMOJI")) {
-                isEmoji = true;
-                message = "";  // Không cần tin nhắn nếu gửi emoji
-            }
-
-            boolean success = privateChatManager.sendMessage(username, receiver, message, filePath, isEmoji);
-            if (success) {
-                if (isEmoji) {
-                    writer.write("Đã gửi emoji tới " + receiver + "\n");
-                } else if (filePath != null) {
-                    writer.write("Đã gửi file tới " + receiver + "\n");
-                } else {
-                    writer.write("Đã gửi tin nhắn tới " + receiver + "\n");
+            // Xử lý các yêu cầu từ client
+            String clientMessage;
+            while ((clientMessage = in.readLine()) != null) {
+                if (clientMessage.equals("TEXT_MESSAGE")) {
+                    handleTextMessage();
+                } else if (clientMessage.equals("FILE_TRANSFER")) {
+                    handleFileTransfer();
+                } else if (clientMessage.equals("EMOJI")) {
+                    handleEmoji();
                 }
-            } else {
-                writer.write("Không thể gửi tin nhắn tới " + receiver + "\n");
             }
-        } else {
-            writer.write("Cú pháp không hợp lệ! Định dạng: MESSAGE <receiver> <message> hoặc SEND_FILE <file_path>\n");
-        }
-        writer.flush();
-    }
 
-    private void handleFile(String request) throws IOException {
-        writer.write("Nhận file...\n");
-        writer.flush();
-        // Giả lập xử lý file (cần bổ sung logic nếu yêu cầu cụ thể hơn)
-    }
-
-    private void handleEmoji(String request) throws IOException {
-        writer.write("Gửi emoji...\n");
-        writer.flush();
-        // Giả lập xử lý emoji (cần bổ sung logic nếu yêu cầu cụ thể hơn)
-    }
-
-    private void handleGroupChat(String request) throws IOException {
-        writer.write("Xử lý chat nhóm...\n");
-        writer.flush();
-        // Giả lập xử lý chat nhóm (cần bổ sung logic nếu yêu cầu cụ thể hơn)
-    }
-
-    private void closeConnection() {
-        try {
-            if (reader != null) reader.close();
-            if (writer != null) writer.close();
-            if (clientSocket != null) clientSocket.close();
         } catch (IOException e) {
-            System.err.println("Lỗi khi đóng kết nối: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Đóng kết nối khi kết thúc, nhưng sau khi tất cả công việc đã hoàn thành
+            try {
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+
+    // Xử lý tin nhắn văn bản
+    private void handleTextMessage() throws IOException {
+        String sender = in.readLine();
+        String recipient = in.readLine();
+        String message = in.readLine();
+
+        // Lưu tin nhắn vào cơ sở dữ liệu
+        PrivateChatManager chatManager = new PrivateChatManager();
+        boolean isSaved = chatManager.sendMessage(sender, recipient, message, null, false);
+
+        if (isSaved) {
+            // Log và gửi phản hồi lại cho client gửi
+            serverUI.appendColoredLog("Tin nhắn từ " + sender + " tới " + recipient + ": " + message, Color.BLACK);
+            out.println("SUCCESS");
+
+            // Gửi lại tin nhắn tới client nhận
+            sendMessageToRecipient(recipient, "TEXT_MESSAGE", sender, message);
+        } else {
+            out.println("FAILED");
+        }
+    }
+
+    // Xử lý gửi file
+    private void handleFileTransfer() throws IOException {
+        String sender = in.readLine(); // Đọc tên người gửi
+        String recipient = in.readLine(); // Đọc tên người nhận
+        String fileName = in.readLine(); // Đọc tên tệp
+
+        // Đảm bảo thư mục "received_files" tồn tại
+        File directory = new File("src/received_files");  // Hoặc thư mục khác tùy theo yêu cầu
+        if (!directory.exists()) {
+            directory.mkdirs();  // Tạo thư mục nếu chưa tồn tại
+        }
+
+        // Tạo một đối tượng File để lưu tệp
+        File file = new File(directory, fileName);
+
+        // Sử dụng BufferedOutputStream để ghi tệp nhận từ client vào thư mục
+        try (BufferedOutputStream fileOut = new BufferedOutputStream(new FileOutputStream(file))) {
+            byte[] buffer = new byte[1024];  // Sử dụng buffer để đọc dữ liệu
+            int bytesRead;
+
+            // Đọc dữ liệu từ socket và ghi vào tệp
+            while ((bytesRead = clientSocket.getInputStream().read(buffer)) != -1) {
+                fileOut.write(buffer, 0, bytesRead);
+            }
+            fileOut.flush();  // Đảm bảo tất cả dữ liệu được ghi vào tệp
+
+            // Kiểm tra xem tệp đã được lưu thành công
+            if (file.exists()) {
+                System.out.println("Tệp đã được lưu: " + file.getAbsolutePath());
+                out.println("SUCCESS");  // Gửi phản hồi thành công cho client
+            } else {
+                System.err.println("Lỗi khi lưu tệp.");
+                out.println("ERROR");  // Gửi phản hồi lỗi cho client
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            out.println("ERROR");  // Gửi phản hồi lỗi nếu có sự cố trong quá trình ghi tệp
+        }
+
+        // Gửi thông tin về tệp đã nhận tới client nhận (nếu cần)
+        sendMessageToRecipient(recipient, "FILE_TRANSFER", sender, fileName);
+    }
+
+
+    // Xử lý gửi emoji
+    private void handleEmoji() throws IOException {
+        String sender = in.readLine();
+        String recipient = in.readLine();
+        String emoji = in.readLine();
+
+        // Lưu emoji vào cơ sở dữ liệu
+        PrivateChatManager chatManager = new PrivateChatManager();
+        boolean isSaved = chatManager.sendMessage(sender, recipient, emoji, null, true);
+
+        if (isSaved) {
+            serverUI.appendColoredLog("Emoji từ " + sender + " tới " + recipient + ": " + emoji, Color.BLACK);
+            out.println("SUCCESS");
+
+            // Gửi lại emoji tới client nhận
+            sendMessageToRecipient(recipient, "EMOJI", sender, emoji);
+        } else {
+            out.println("FAILED");
+        }
+    }
+
+    // Gửi tin nhắn tới client nhận
+    private void sendMessageToRecipient(String recipient, String messageType, String sender, String content) {
+        ClientHandler recipientHandler = serverUI.getClientHandlerByUsername(recipient);
+        if (recipientHandler != null) {
+            recipientHandler.out.println(messageType);
+            recipientHandler.out.println(sender);
+            recipientHandler.out.println(content);
         }
     }
 }

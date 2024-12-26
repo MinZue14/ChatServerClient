@@ -34,7 +34,7 @@ public class GroupChat extends JPanel {
     private JButton sendFileButton;
     private JButton emojiButton;
 
-    public GroupChat(String username) {
+    public GroupChat(String username, ChatClient chatClient) {
         this.username = username;
         this.groupChatManager = new GroupChatManager();
         this.groupManager = new GroupManager();

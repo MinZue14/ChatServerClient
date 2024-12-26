@@ -6,13 +6,16 @@ import java.awt.*;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-
+import java.sql.Timestamp;
+import java.util.HashMap;
+import java.util.Map;
+import Object.PrivateMessage;
 public class ServerUI {
     private JFrame frame;
     private JTextPane logArea;
     private StyledDocument logDocument;
     private ServerSocket serverSocket;
-    private ChatPrivateServer chatPrivateServer;
+    private Map<String, ClientHandler> clients = new HashMap<>();
 
     public ServerUI() {
         createUI();
@@ -80,9 +83,9 @@ public class ServerUI {
         return panel;
     }
 
-    private void appendColoredLog(String log, Color color) {
+    void appendColoredLog(String log, Color color) {
         SimpleAttributeSet attributeSet = new SimpleAttributeSet();
-        StyleConstants.setForeground(attributeSet, color); // Đặt màu cho text
+        StyleConstants.setForeground(attributeSet, color);
 
         try {
             logDocument.insertString(logDocument.getLength(), log + "\n", attributeSet);
@@ -90,7 +93,6 @@ public class ServerUI {
             e.printStackTrace();
         }
     }
-
     private void startServers() {
         // Khởi chạy server chính
         new Thread(() -> {
@@ -103,7 +105,7 @@ public class ServerUI {
                     appendColoredLog("Kết nối từ " + clientSocket.getInetAddress(), Color.BLUE);
 
                     // Tạo và chạy một ClientHandler
-                    ClientHandler clientHandler = new ClientHandler(clientSocket);
+                    ClientHandler clientHandler = new ClientHandler(clientSocket, this);
                     Thread thread = new Thread(clientHandler);
                     thread.start();
                 }
@@ -111,13 +113,27 @@ public class ServerUI {
                 appendColoredLog("Lỗi khi khởi động server: " + e.getMessage(), Color.RED);
             }
         }).start();
+    }
 
-        // Khởi chạy ChatPrivateServer
-        chatPrivateServer = new ChatPrivateServer(logArea);
-        new Thread(chatPrivateServer).start();
+    // Thêm ClientHandler vào danh sách
+    public void addClientHandler(String username, ClientHandler clientHandler) {
+        clients.put(username, clientHandler);
+        appendColoredLog("Người dùng " + username + " đã kết nối.", Color.GREEN);
+    }
+
+    // Xóa ClientHandler khỏi danh sách
+    public void removeClientHandler(String username) {
+        clients.remove(username);
+        appendColoredLog("Người dùng " + username + " đã ngắt kết nối.", Color.ORANGE);
+    }
+
+    // Tìm ClientHandler dựa trên tên người dùng
+    public ClientHandler getClientHandlerByUsername(String username) {
+        return clients.get(username);
     }
 
     public static void main(String[] args) {
         new ServerUI();
     }
+
 }

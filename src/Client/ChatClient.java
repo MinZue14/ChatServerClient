@@ -1,166 +1,136 @@
 package Client;
 
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.*;
-import java.net.Socket;
-import java.nio.file.Files;
+import java.net.*;
 
 public class ChatClient {
-    private JFrame frame;
-    private JTextArea chatArea;
-    private JTextField messageField;
-    private JButton sendButton, fileButton, emojiButton;
     private Socket socket;
-    private ObjectInputStream in;
-    private ObjectOutputStream out;
+    private PrintWriter out;
+    private BufferedReader in;
+    private DataOutputStream fileOut;
+    private String serverAddress;
+    private int serverPort;
+    private String username;
 
-    public ChatClient(String serverAddress, int port) {
-        createUI();
-        connectToServer(serverAddress, port);
+    public ChatClient(String serverAddress, int serverPort, String username) {
+        this.serverAddress = serverAddress;
+        this.serverPort = serverPort;
+        this.username = username;
     }
 
-    private void createUI() {
-        frame = new JFrame("Chat Client");
-        frame.setSize(500, 400);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        JPanel panel = new JPanel(new BorderLayout());
-        chatArea = new JTextArea();
-        chatArea.setEditable(false);
-        JScrollPane scrollPane = new JScrollPane(chatArea);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        JPanel inputPanel = new JPanel(new BorderLayout());
-        messageField = new JTextField();
-        sendButton = new JButton("Send");
-        fileButton = new JButton("File");
-        emojiButton = new JButton("Emoji");
-
-        inputPanel.add(messageField, BorderLayout.CENTER);
-        JPanel buttonPanel = new JPanel(new FlowLayout());
-        buttonPanel.add(sendButton);
-        buttonPanel.add(fileButton);
-        buttonPanel.add(emojiButton);
-        inputPanel.add(buttonPanel, BorderLayout.EAST);
-
-        panel.add(inputPanel, BorderLayout.SOUTH);
-        frame.add(panel);
-
-        frame.setVisible(true);
-
-        // Sự kiện gửi tin nhắn
-        sendButton.addActionListener(e -> sendMessage());
-        // Sự kiện gửi file
-        fileButton.addActionListener(e -> sendFile());
-        // Sự kiện gửi emoji
-        emojiButton.addActionListener(e -> sendEmoji());
+    public void connect() throws IOException {
+        socket = new Socket(serverAddress, serverPort);
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     }
 
-    private void connectToServer(String serverAddress, int port) {
-        try {
-            socket = new Socket(serverAddress, port);
-            out = new ObjectOutputStream(socket.getOutputStream());
-            in = new ObjectInputStream(socket.getInputStream());
-
-            // Lắng nghe từ server
-            new Thread(this::listenFromServer).start();
-
-            // Đăng ký tên người dùng
-            String username = JOptionPane.showInputDialog(frame, "Enter your username:");
-            if (username != null) {
-                out.writeObject(username);
-                out.flush();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(frame, "Unable to connect to server!", "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    private void listenFromServer() {
-        try {
-            while (true) {
-                Object obj = in.readObject();
-                if (obj instanceof String) {
-                    chatArea.append(obj + "\n");
-                } else if (obj instanceof byte[]) {
-                    // Nhận file
-                    receiveFile((byte[]) obj);
-                }
-            }
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void sendMessage() {
-        try {
-            String message = messageField.getText().trim();
-            if (!message.isEmpty()) {
-                out.writeObject(message);
-                out.flush();
-                messageField.setText("");
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void sendFile() {
-        try {
-            JFileChooser fileChooser = new JFileChooser();
-            int option = fileChooser.showOpenDialog(frame);
-            if (option == JFileChooser.APPROVE_OPTION) {
-                File file = fileChooser.getSelectedFile();
-                byte[] fileData = Files.readAllBytes(file.toPath());
-                out.writeObject(fileData);
-                out.flush();
-                chatArea.append("File sent: " + file.getName() + "\n");
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void receiveFile(byte[] fileData) {
-        try {
-            File file = new File("received_file_" + System.currentTimeMillis());
-            FileOutputStream fos = new FileOutputStream(file);
-            fos.write(fileData);
-            fos.close();
-
-            chatArea.append("File received: " + file.getAbsolutePath() + "\n");
-            Desktop.getDesktop().open(file);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void sendEmoji() {
-        String[] emojis = {"😊", "😂", "👍", "❤️", "🔥"};
-        String selectedEmoji = (String) JOptionPane.showInputDialog(
-                frame,
-                "Select an emoji:",
-                "Emoji",
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                emojis,
-                emojis[0]
-        );
-        if (selectedEmoji != null) {
+    public void listenForMessages() {
+        new Thread(() -> {
             try {
-                out.writeObject(selectedEmoji);
-                out.flush();
+                String messageType;
+                while ((messageType = in.readLine()) != null) {
+                    String sender = in.readLine();
+                    String content = in.readLine();
+                    // Xử lý tin nhắn từ server
+                    if (messageType.equals("TEXT_MESSAGE")) {
+                        displayReceivedMessage(content);
+                    } else if (messageType.equals("FILE_TRANSFER")) {
+                        displayFile(content);
+                    } else if (messageType.equals("EMOJI")) {
+                        displayEmoji(content);
+                    }
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }).start();
+    }
+
+    private void displayReceivedMessage(String message) {
+        System.out.println("Nhận tin nhắn: " + message);
+    }
+
+    private void displayFile(String fileName) {
+        System.out.println("Nhận file: " + fileName);
+    }
+
+    private void displayEmoji(String emoji) {
+        System.out.println("Nhận emoji: " + emoji);
+    }
+
+    public String sendMessage(String sender, String recipient, String message) {
+        try {
+            if (out == null) {
+                connect();
+            }
+            out.println("TEXT_MESSAGE");
+            out.println(sender);
+            out.println(recipient);
+            out.println(message);
+
+            String response = in.readLine();
+            return response;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "ERROR";
         }
     }
 
-    public static void main(String[] args) {
-        new ChatClient("localhost", 23456); // Kết nối tới server chat riêng
+    public String sendFile(String sender, String recipient, File file) throws IOException {
+        try {
+            // Nếu chưa kết nối, kết nối lại
+            if (out == null) {
+                connect();  // Đảm bảo bạn có kết nối mở
+            }
+
+            // Gửi thông tin về tệp
+            out.println("FILE_TRANSFER");
+            out.println(sender);
+            out.println(recipient);
+            out.println(file.getName());
+
+            // Sử dụng DataOutputStream để gửi tệp
+            try (BufferedInputStream fileIn = new BufferedInputStream(new FileInputStream(file));
+                 DataOutputStream dataOut = new DataOutputStream(socket.getOutputStream())) {
+
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = fileIn.read(buffer)) != -1) {
+                    dataOut.write(buffer, 0, bytesRead);
+                }
+                dataOut.flush();  // Đảm bảo dữ liệu được gửi
+                System.out.println("Đã gửi tệp: " + file.getName());
+            }
+
+            // Đảm bảo dữ liệu được gửi
+            out.flush();
+
+            // Đọc phản hồi từ server sau khi gửi tệp
+            String response = in.readLine();
+            return response;  // Trả về phản hồi từ server
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "ERROR";
+        }
+    }
+
+    public String sendEmoji(String sender, String recipient, String emoji) {
+        try {
+            if (out == null) {
+                connect();
+            }
+
+            out.println("EMOJI");
+            out.println(sender);
+            out.println(recipient);
+            out.println(emoji);  // Gửi emoji dưới dạng chuỗi ký tự
+
+            String response = in.readLine();  // Nhận phản hồi từ server
+            return response;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "ERROR";
+        }
     }
 }
