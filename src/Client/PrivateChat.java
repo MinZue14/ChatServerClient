@@ -73,11 +73,7 @@ public class PrivateChat extends JPanel {
 
         // Sự kiện nút
         sendButton.addActionListener(e -> {
-            try {
-                sendMessage();
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
+            sendMessage();
         });
         sendFileButton.addActionListener(e -> sendFile());
         emojiButton.addActionListener(e -> {
@@ -182,22 +178,6 @@ public class PrivateChat extends JPanel {
         // Hiển thị lịch sử chat
         displayMessages(messages);
     }
-    private void displayMessages(List<PrivateMessage> messages) {
-        filePanel.removeAll();
-
-        for (PrivateMessage message : messages) {
-            if (message.getFilePath() != null && !message.getFilePath().isEmpty()) {
-                displayFile(new File(message.getFilePath()));
-            } else {
-                JPanel messagePanel = createMessageLabel(message);
-                filePanel.add(messagePanel);
-            }
-        }
-
-        // Update the UI
-        filePanel.revalidate();
-        filePanel.repaint();
-    }
     private JPanel createMessageLabel(PrivateMessage message) {
         JPanel messagePanel = new JPanel();
         messagePanel.setLayout(new BorderLayout());
@@ -230,57 +210,83 @@ public class PrivateChat extends JPanel {
             setPreferredSize(new Dimension(40, 40));
         }};
     }
+    private void displayMessages(List<PrivateMessage> messages) {
+        filePanel.removeAll();
 
-    private void sendMessage() throws IOException {
-//        String message = messageField.getText();
-//        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
-//
-//        if (!message.isEmpty() && !recipient.isEmpty()) {
-//            // Gửi tin nhắn và nhận phản hồi từ server
-//            String response = chatClient.sendMessage(username, recipient, message);
-//            if (response.equals("SUCCESS")) {
-//                // Nếu phản hồi từ server là thành công, hiển thị tin nhắn
-//                displaySentMessage(message);
-//            } else {
-//                JOptionPane.showMessageDialog(this, "Gửi tin nhắn thất bại");
-//            }
-//            messageField.setText(""); // Xóa trường nhập
-//        }
+        for (PrivateMessage message : messages) {
+            if (message.getFilePath() != null && !message.getFilePath().isEmpty()) {
+                displayFile(new File(message.getFilePath()));
+            } else {
+                JPanel messagePanel = createMessageLabel(message);
+                filePanel.add(messagePanel);
+            }
+        }
+
+        // Update the UI
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+
+    private void sendMessage() {
+        String message = messageField.getText();
+        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+
+        if (!message.isEmpty() && !recipient.isEmpty()) {
+            // Gửi tin nhắn và nhận phản hồi từ server
+            String response = chatClient.sendMessage(username, recipient, message);
+            if (response.equals("SUCCESS")) {
+                displaySentMessage(message);
+            } else {
+                JOptionPane.showMessageDialog(this, "Gửi tin nhắn thất bại");
+            }
+            messageField.setText(""); // Xóa trường nhập
+        }
     }
 
     private void sendFile() {
-//        JFileChooser fileChooser = new JFileChooser();
-//        int returnValue = fileChooser.showOpenDialog(this);
-//        if (returnValue == JFileChooser.APPROVE_OPTION) {
-//            File selectedFile = fileChooser.getSelectedFile();
-//            String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
-//
-//            try {
-//                // Gửi file và nhận phản hồi từ server
-//                String response = chatClient.sendFile(username, recipient, selectedFile);
-//                if (response.equals("SUCCESS")) {
-//                    displayFile(selectedFile); // Hiển thị file trong UI
-//                } else {
-//                    JOptionPane.showMessageDialog(this, "Gửi file thất bại");
-//                }
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
-//        }
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(this);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            String selectedUser = selectedUserLabel.getText().replace("Chat với: ", "");
+
+            try {
+                // Kiểm tra tệp có tồn tại không
+                if (!file.exists()) {
+                    JOptionPane.showMessageDialog(this, "Tệp không tồn tại");
+                    return;
+                }
+
+                // Gửi thông tin về tệp (người nhận, người gửi, và tên tệp)
+                String response = chatClient.sendFile(username, selectedUser, file);
+
+                // Kiểm tra phản hồi từ server
+                if ("SUCCESS".equals(response)) {
+                    displayFile(file);  // Hiển thị tệp trong UI
+                    JOptionPane.showMessageDialog(this, "Gửi tệp thành công!");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Gửi tệp thất bại. Phản hồi từ server: " + response);
+                }
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Lỗi khi gửi tệp: " + e.getMessage());
+                e.printStackTrace();  // In chi tiết lỗi ra console
+            }
+        }
     }
 
     private void sendEmoji() throws IOException {
-//        String emoji = "😊";
-//        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
-//
-//        // Gửi emoji và nhận phản hồi từ server
-//        String response = chatClient.sendEmoji(username, recipient, emoji);
-//        if (response.equals("SUCCESS")) {
-//            // Hiển thị emoji
-//            displayEmoji(emoji);
-//        } else {
-//            JOptionPane.showMessageDialog(this, "Gửi emoji thất bại");
-//        }
+        String emoji = "😊";
+        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+
+        // Gửi emoji và nhận phản hồi từ server
+        String response = chatClient.sendEmoji(username, recipient, emoji);
+        if (response.equals("SUCCESS")) {
+            // Hiển thị emoji
+            displayEmoji(emoji);
+        } else {
+            JOptionPane.showMessageDialog(this, "Gửi emoji thất bại");
+        }
     }
     private void displaySentMessage(String message) {
         // Khởi tạo đối tượng PrivateMessage với timestamp và các thông tin cần thiết
@@ -336,7 +342,25 @@ public class PrivateChat extends JPanel {
         filePanel.revalidate();
         filePanel.repaint();
     }
+    private void displayReceivedMessage(String message) {
+        PrivateMessage receivedMessage = new PrivateMessage(
+                0,
+                selectedUserLabel.getText().replace("Chat với: ", ""),  // sender
+                username,
+                message,
+                new Timestamp(System.currentTimeMillis()),  // timestamp
+                null,
+                false
+        );
 
+        // Tạo panel để hiển thị tin nhắn
+        JPanel messagePanel = createMessageLabel(receivedMessage);
+        filePanel.add(messagePanel);
+
+        // Cập nhật giao diện
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
     private void downloadFile(File file) {
         JOptionPane.showMessageDialog(this, "Tải về: " + file.getAbsolutePath());
     }
