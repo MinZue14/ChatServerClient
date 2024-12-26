@@ -40,15 +40,8 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
-            // Đóng kết nối khi kết thúc, nhưng sau khi tất cả công việc đã hoàn thành
-            try {
-                if (clientSocket != null && !clientSocket.isClosed()) {
-                    clientSocket.close();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
+            // Đảm bảo đóng socket chỉ sau khi tất cả công việc đã hoàn thành
+            closeConnection();
         }
     }
 
@@ -98,21 +91,15 @@ public class ClientHandler implements Runnable {
             while ((bytesRead = clientSocket.getInputStream().read(buffer)) != -1) {
                 fileOut.write(buffer, 0, bytesRead);
             }
+
+            System.out.println("Tệp đã được lưu: " + file.getAbsolutePath());
+            out.println("SUCCESS");  // Gửi phản hồi thành công cho client
             fileOut.flush();  // Đảm bảo tất cả dữ liệu được ghi vào tệp
 
-            // Kiểm tra xem tệp đã được lưu thành công
-            if (file.exists()) {
-                System.out.println("Tệp đã được lưu: " + file.getAbsolutePath());
-                out.println("SUCCESS");  // Gửi phản hồi thành công cho client
-            } else {
-                System.err.println("Lỗi khi lưu tệp.");
-                out.println("ERROR");  // Gửi phản hồi lỗi cho client
+            } catch (IOException e) {
+                e.printStackTrace();
+                out.println("ERROR");  // Gửi phản hồi lỗi nếu có sự cố trong quá trình ghi tệp
             }
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            out.println("ERROR");  // Gửi phản hồi lỗi nếu có sự cố trong quá trình ghi tệp
-        }
 
         // Gửi thông tin về tệp đã nhận tới client nhận (nếu cần)
         sendMessageToRecipient(recipient, "FILE_TRANSFER", sender, fileName);
@@ -148,5 +135,17 @@ public class ClientHandler implements Runnable {
             recipientHandler.out.println(sender);
             recipientHandler.out.println(content);
         }
+    }
+    // Phương thức để đóng kết nối một cách an toàn
+    private void closeConnection() {
+        try {
+            // Chỉ đóng socket nếu nó vẫn còn mở
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                clientSocket.close();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 }

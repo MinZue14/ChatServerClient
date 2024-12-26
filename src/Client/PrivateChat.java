@@ -276,18 +276,34 @@ public class PrivateChat extends JPanel {
     }
 
     private void sendEmoji() throws IOException {
-        String emoji = "😊";
-        String recipient = selectedUserLabel.getText().replace("Chat với: ", "");
+        String recipient = selectedUserLabel.getText().replace("Chat với: ", "").trim();
 
-        // Gửi emoji và nhận phản hồi từ server
-        String response = chatClient.sendEmoji(username, recipient, emoji);
-        if (response.equals("SUCCESS")) {
-            // Hiển thị emoji
-            displayEmoji(emoji);
-        } else {
-            JOptionPane.showMessageDialog(this, "Gửi emoji thất bại");
+        // Tạo danh sách emoji mẫu
+        String[] emojis = {"😀", "😂", "😍", "😎", "😢", "😡", "👍", "🙏", "🎉"};
+        String emoji = (String) JOptionPane.showInputDialog(
+                this,
+                "Chọn một emoji để gửi:",
+                "Chọn Emoji",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                emojis,
+                emojis[0]
+        );
+
+        if (emoji != null && !emoji.trim().isEmpty()) {
+            // Gửi emoji và nhận phản hồi từ server
+            String response = chatClient.sendEmoji(username, recipient, emoji);
+
+            if (response.equals("ERROR")) {
+                JOptionPane.showMessageDialog(this, "Gửi emoji thất bại");
+            } else {
+                // Hiển thị emoji từ phản hồi server
+                displayEmoji(response);
+            }
         }
     }
+
+
     private void displaySentMessage(String message) {
         // Khởi tạo đối tượng PrivateMessage với timestamp và các thông tin cần thiết
         PrivateMessage sentMessage = new PrivateMessage(
@@ -342,27 +358,12 @@ public class PrivateChat extends JPanel {
         filePanel.revalidate();
         filePanel.repaint();
     }
-    private void displayReceivedMessage(String message) {
-        PrivateMessage receivedMessage = new PrivateMessage(
-                0,
-                selectedUserLabel.getText().replace("Chat với: ", ""),  // sender
-                username,
-                message,
-                new Timestamp(System.currentTimeMillis()),  // timestamp
-                null,
-                false
-        );
-
-        // Tạo panel để hiển thị tin nhắn
-        JPanel messagePanel = createMessageLabel(receivedMessage);
-        filePanel.add(messagePanel);
-
-        // Cập nhật giao diện
-        filePanel.revalidate();
-        filePanel.repaint();
-    }
     private void downloadFile(File file) {
-        JOptionPane.showMessageDialog(this, "Tải về: " + file.getAbsolutePath());
+        try {
+            // Định nghĩa hành động tải tệp (ví dụ: mở tệp, tải từ server, hoặc sao chép tệp vào thư mục)
+            Desktop.getDesktop().open(file);  // Mở tệp trực tiếp
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi tải tệp: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
     }
-
 }

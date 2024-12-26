@@ -78,9 +78,11 @@ public class ChatClient {
 
     public String sendFile(String sender, String recipient, File file) throws IOException {
         try {
-            // Nếu chưa kết nối, kết nối lại
-            if (out == null) {
-                connect();  // Đảm bảo bạn có kết nối mở
+            if (socket == null || socket.isClosed() || !socket.isConnected()) {
+                System.out.println("Socket không hợp lệ. Đang cố gắng kết nối lại...");
+                connect();  // Nếu socket không hợp lệ, kết nối lại
+            } else {
+                System.out.println("Socket hợp lệ, tiếp tục truyền tải dữ liệu.");
             }
 
             // Gửi thông tin về tệp
@@ -103,11 +105,37 @@ public class ChatClient {
             }
 
             // Đảm bảo dữ liệu được gửi
-            out.flush();
+            if (out != null) {
+                out.flush();  // Đảm bảo dữ liệu được gửi
+                System.out.println("dữ liệu đã đc gửi.");
+            } else {
+                System.out.println("out là null, không thể gọi flush.");
+                return "ERROR_OUT_NULL";
+            }
 
-            // Đọc phản hồi từ server sau khi gửi tệp
-            String response = in.readLine();
-            return response;  // Trả về phản hồi từ server
+            String response = null;
+
+            System.out.println("Kiểm tra luồng vào:");
+            if (in != null) {
+                System.out.println("BufferedReader 'in' hợp lệ.");
+            } else {
+                System.out.println("BufferedReader 'in' là null.");
+            }
+
+//            try {
+//                System.out.println("Đang đọc phản hồi từ server...");
+//                response = in.readLine();
+//                if (response == null) {
+//                    System.out.println("Không nhận được phản hồi từ server.");
+//                    return "ERROR_NO_RESPONSE";
+//                }
+//            } catch (IOException e) {
+//                System.out.println("Lỗi khi đọc phản hồi từ server: " + e.getMessage());
+//                e.printStackTrace();
+//                return "ERROR_READING_RESPONSE";
+//            }
+            System.out.println("Đã nhận phản hồi: " + response);
+            return response;
 
         } catch (IOException e) {
             e.printStackTrace();

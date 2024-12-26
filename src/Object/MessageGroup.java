@@ -1,8 +1,11 @@
 package Object;
 
+import java.io.Serializable;
 import java.sql.Timestamp;
 
-public class MessageGroup {
+public class MessageGroup implements Serializable {
+
+    private static final long serialVersionUID = 1L; // Nên thêm serialVersionUID để đảm bảo tính tương thích
     private String sender;
     private String content;
     private Timestamp timestamp;
@@ -66,5 +69,9 @@ public class MessageGroup {
                 " | Tin nhắn: " + content +
                 (filePath != null ? " | File đính kèm: " + filePath : "") +
                 (isEmoji ? " | Có emoji" : "");
+    }
+
+    public boolean isFileMessage() {
+        return filePath != null && !filePath.isEmpty();
     }
 }

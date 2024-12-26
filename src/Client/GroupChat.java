@@ -5,6 +5,7 @@ import Database.GroupManager;
 import Database.GroupChatManager;
 import Database.GroupMemberManager;
 import Object.Group;
+import Server.GroupHandle;
 
 import javax.swing.*;
 import javax.swing.text.Style;
@@ -14,8 +15,12 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.ObjectOutputStream;
+import java.net.Socket;
 import java.nio.file.Files;
+import java.sql.Timestamp;
 import java.util.List;
+import java.io.IOException;
 
 public class GroupChat extends JPanel {
     private String username;
@@ -33,9 +38,21 @@ public class GroupChat extends JPanel {
     private JButton sendButton;
     private JButton sendFileButton;
     private JButton emojiButton;
+    private JPanel filePanel;
+    private Socket socket;
+    private String groupName;
+    private ObjectOutputStream outputStream;
 
     public GroupChat(String username, ChatClient chatClient) {
         this.username = username;
+
+        // Kết nối đến server
+        try {
+            socket = new Socket("localhost", 12345); // Kết nối tới server tại cổng 12345
+            outputStream = new ObjectOutputStream(socket.getOutputStream());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         this.groupChatManager = new GroupChatManager();
         this.groupManager = new GroupManager();
         setLayout(new BorderLayout()); // Sử dụng BorderLayout làm layout chính
@@ -97,20 +114,21 @@ public class GroupChat extends JPanel {
         leftSplitPane.setDividerLocation(300);
         leftSplitPane.setResizeWeight(0.5);
 
-        // Panel trung tâm - Khung chat nhóm
+        // Khung chat nhóm (groupChatPanel) - sử dụng filePanel thay vì chatArea
         groupChatPanel = new JPanel();
         groupChatPanel.setLayout(new BorderLayout());
 
+        // Tiêu đề nhóm chat
         selectedGroupLabel = new JLabel("Chat nhóm: [Tên nhóm]");
         selectedGroupLabel.setFont(new Font("Arial", Font.BOLD, 16));
         selectedGroupLabel.setHorizontalAlignment(SwingConstants.CENTER);
         groupChatPanel.add(selectedGroupLabel, BorderLayout.NORTH);
 
-        chatArea = new JTextPane();
-        chatArea.setEditable(false);
-        chatArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        JScrollPane chatScroll = new JScrollPane(chatArea);
-        groupChatPanel.add(chatScroll, BorderLayout.CENTER);
+        // Panel hiển thị tin nhắn (sử dụng filePanel thay vì chatArea)
+        filePanel = new JPanel();
+        filePanel.setLayout(new BoxLayout(filePanel, BoxLayout.Y_AXIS)); // Hiển thị theo chiều dọc
+        JScrollPane scrollPane = new JScrollPane(filePanel);
+        groupChatPanel.add(scrollPane, BorderLayout.CENTER);
 
         // Phía dưới: Khung nhập và các nút
         JPanel inputPanel = new JPanel();
@@ -137,6 +155,11 @@ public class GroupChat extends JPanel {
         sendButton = new JButton(resizedSendIcon);
         sendButton.setPreferredSize(new Dimension(40, 40));
         sendButton.setToolTipText("Gửi Tin Nhắn");
+
+        // Các thành phần giao diện khác (panel, buttons, etc.)
+        sendButton.addActionListener(e -> sendMessage());
+        sendFileButton.addActionListener(e -> sendFile());
+        emojiButton.addActionListener(e -> sendEmoji());
 
         // Tạo JPanel cho các nút
         JPanel buttonPanel = new JPanel();
@@ -183,7 +206,6 @@ public class GroupChat extends JPanel {
         refreshGroupButton.addActionListener(e -> refreshGroupList());
 
         refreshGroupList();
-        setupSendButtonAction();
     }
 
     private void refreshGroupList() {
@@ -305,115 +327,9 @@ public class GroupChat extends JPanel {
             JOptionPane.showMessageDialog(this, "Không thể rời nhóm: " + groupName);
         }
     }
-    private void appendChatMessage(String sender, String message, boolean isFile) {
-        StyledDocument doc = chatArea.getStyledDocument();
-
-        try {
-            // Style cho tên người gửi
-            Style senderStyle = chatArea.addStyle("SenderStyle", null);
-            StyleConstants.setBold(senderStyle, true);
-            StyleConstants.setForeground(senderStyle, Color.BLUE);
-
-            // Style cho tin nhắn thông thường
-            Style messageStyle = chatArea.addStyle("MessageStyle", null);
-            StyleConstants.setForeground(messageStyle, Color.BLACK);
-
-            // Style cho file
-            Style fileStyle = chatArea.addStyle("FileStyle", null);
-            StyleConstants.setForeground(fileStyle, Color.RED);
-            StyleConstants.setUnderline(fileStyle, true);
-
-            // Thêm tên người gửi
-            doc.insertString(doc.getLength(), sender + ": ", senderStyle);
-
-            if (isFile) {
-                // Hiển thị tên file
-                String fileName = message.substring(message.lastIndexOf(File.separator) + 1);
-                doc.insertString(doc.getLength(), fileName + " ", fileStyle);
-
-                // Tạo hai tùy chọn: Mở và Tải về
-                addFileOptions(doc, message, fileName);
-            } else {
-                // Thêm tin nhắn thông thường
-                doc.insertString(doc.getLength(), message, messageStyle);
-            }
-
-            doc.insertString(doc.getLength(), "\n", null); // Xuống dòng
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-    private void addFileOptions(StyledDocument doc, String filePath, String fileName) throws Exception {
-        // Style cho liên kết
-        Style linkStyle = chatArea.addStyle("LinkStyle", null);
-        StyleConstants.setForeground(linkStyle, Color.BLUE);
-        StyleConstants.setUnderline(linkStyle, true);
-
-        // Thêm các liên kết Mở và Tải về
-        doc.insertString(doc.getLength(), "[Mở] ", linkStyle);
-        doc.insertString(doc.getLength(), "[Tải về]", linkStyle);
-
-        // Xử lý sự kiện chuột
-        chatArea.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                try {
-                    int offset = chatArea.viewToModel(e.getPoint());
-                    String clickedText = doc.getText(offset, 5);
-
-                    if ("[Mở]".equals(clickedText)) {
-                        File file = new File(filePath);
-                        if (file.exists()) {
-                            Desktop.getDesktop().open(file);
-                        } else {
-                            JOptionPane.showMessageDialog(null, "File không tồn tại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        }
-                    } else if ("[Tải về]".equals(clickedText)) {
-                        JFileChooser fileChooser = new JFileChooser();
-                        fileChooser.setSelectedFile(new File(fileName));
-                        int result = fileChooser.showSaveDialog(null);
-                        if (result == JFileChooser.APPROVE_OPTION) {
-                            File saveFile = fileChooser.getSelectedFile();
-                            Files.copy(new File(filePath).toPath(), saveFile.toPath());
-                            JOptionPane.showMessageDialog(null, "File đã được tải về!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-                        }
-                    }
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(null, "Lỗi khi xử lý file: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-    }
-
-    // Cập nhật phương thức loadGroupChat
-    private void loadGroupChat(String groupName) {
-        selectedGroupLabel.setText("Chat nhóm: " + groupName); // Cập nhật tiêu đề nhóm chat
-        chatArea.setText(""); // Xóa nội dung chat cũ
-
-        // Kiểm tra người dùng đã tham gia nhóm chưa
-        if (!isUserInGroup(groupName)) {
-            JOptionPane.showMessageDialog(this, "Bạn phải tham gia nhóm trước khi có thể chat!", "Thông báo", JOptionPane.WARNING_MESSAGE);
-            return; // Dừng lại nếu chưa tham gia nhóm
-        }
-
-        // Hiển thị danh sách thành viên của nhóm
-        refreshMemberList(groupName);
-
-        // Lấy lịch sử tin nhắn của nhóm từ cơ sở dữ liệu
-        List<MessageGroup> messages = groupChatManager.getChatHistoryByGroupName(groupName);
-
-        // Hiển thị các tin nhắn trong chatArea
-        for (MessageGroup message : messages) {
-            appendChatMessage(
-                    message.getSender(),                  // Người gửi
-                    message.getFilePath() != null ? message.getFilePath() : message.getContent(), // Nội dung tin nhắn hoặc file
-                    message.getFilePath() != null        // Đánh dấu nếu là file
-            );
-        }
-    }
     // Hiển thị danh sách thành viên của nhóm
     private void refreshMemberList(String groupName) {
-        memberListPanel.removeAll();  // Xóa danh sách cũ
+        memberListPanel.removeAll(); // Xóa danh sách cũ
 
         JLabel memberListLabel = new JLabel("Danh sách thành viên: " + groupName);
         memberListLabel.setFont(new Font("Arial", Font.BOLD, 14));
@@ -431,79 +347,140 @@ public class GroupChat extends JPanel {
         memberListPanel.repaint();
     }
 
-    // Cập nhật phương thức gửi tin nhắn
-    private void setupSendButtonAction() {
-        // Gửi tin nhắn văn bản
-        sendButton.addActionListener(e -> {
-            String groupName = selectedGroupLabel.getText().replace("Chat nhóm: ", "").trim();
-            if (groupName.isEmpty() || !isUserInGroup(groupName)) {
-                JOptionPane.showMessageDialog(this, "Bạn phải tham gia nhóm trước khi có thể gửi tin nhắn!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+    // Tải và hiển thị tin nhắn nhóm
+    private void loadGroupChat(String groupName) {
+        this.groupName = groupName; // Gán tên nhóm đã chọn
+        selectedGroupLabel.setText("Chat nhóm: " + groupName); // Cập nhật tiêu đề nhóm chat
+        filePanel.removeAll(); // Xóa tất cả các tin nhắn hiện tại trong filePanel
 
-            String message = messageField.getText().trim();
-            if (!message.isEmpty()) {
-                boolean success = groupChatManager.sendMessageToGroup(groupName, username, message, null, false);
-                if (success) {
-                    appendChatMessage(username, message, false); // Tin nhắn thường
-                    messageField.setText("");
-                } else {
-                    JOptionPane.showMessageDialog(this, "Không thể gửi tin nhắn. Vui lòng thử lại.", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
+        if (!isUserInGroup(groupName)) {
+            JOptionPane.showMessageDialog(this, "Bạn phải tham gia nhóm trước khi có thể chat!", "Thông báo", JOptionPane.WARNING_MESSAGE);
+            return; // Dừng lại nếu chưa tham gia nhóm
+        }
 
-// Gửi file
-        sendFileButton.addActionListener(e -> {
-            String groupName = selectedGroupLabel.getText().replace("Chat nhóm: ", "").trim();
-            if (groupName.isEmpty() || !isUserInGroup(groupName)) {
-                JOptionPane.showMessageDialog(this, "Bạn phải tham gia nhóm trước khi có thể gửi file!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+        // Lấy và hiển thị danh sách thành viên nhóm
+        refreshMemberList(groupName);
 
-            JFileChooser fileChooser = new JFileChooser();
-            int result = fileChooser.showOpenDialog(this);
-            if (result == JFileChooser.APPROVE_OPTION) {
-                String filePath = fileChooser.getSelectedFile().getAbsolutePath();
-                boolean success = groupChatManager.sendMessageToGroup(groupName, username, "[File: " + filePath + "]", filePath, true);
-                if (success) {
-                    appendChatMessage(username, filePath, true); // Tin nhắn là file
-                } else {
-                    JOptionPane.showMessageDialog(this, "Không thể gửi file. Vui lòng thử lại.", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
+        // Lấy lịch sử tin nhắn của nhóm từ cơ sở dữ liệu
+        List<MessageGroup> messages = groupChatManager.getChatHistoryByGroupName(groupName);
 
-        emojiButton.addActionListener(e -> {
-            String groupName = selectedGroupLabel.getText().replace("Chat nhóm: ", "").trim();
-            if (groupName.isEmpty() || !isUserInGroup(groupName)) {
-                JOptionPane.showMessageDialog(this, "Bạn phải tham gia nhóm trước khi có thể gửi emoji!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+        // Hiển thị các tin nhắn trong filePanel
+        for (MessageGroup message : messages) {
+            JPanel messagePanel = createMessageLabel(message); // Tạo JPanel cho mỗi tin nhắn
+            filePanel.add(messagePanel); // Thêm JPanel vào filePanel
+        }
 
-            // Tạo danh sách emoji mẫu
-            String[] emojis = {"😀", "😂", "😍", "😎", "😢", "😡", "👍", "🙏", "🎉"};
-            String emoji = (String) JOptionPane.showInputDialog(
-                    this,
-                    "Chọn một emoji để gửi:",
-                    "Chọn Emoji",
-                    JOptionPane.PLAIN_MESSAGE,
-                    null,
-                    emojis,
-                    emojis[0]
-            );
-
-            if (emoji != null && !emoji.trim().isEmpty()) {
-                // Gửi tin nhắn emoji đến nhóm
-                boolean success = groupChatManager.sendMessageToGroup(groupName, username, emoji, null, false);
-                if (success) {
-                    // Cập nhật giao diện với emoji vừa gửi
-                    appendChatMessage(username, emoji, false);
-                } else {
-                    JOptionPane.showMessageDialog(this, "Không thể gửi emoji. Vui lòng thử lại.", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-
+        // Cập nhật lại giao diện sau khi thêm các tin nhắn
+        filePanel.revalidate();
+        filePanel.repaint();
     }
+    // Tạo một JPanel cho mỗi tin nhắn
+    private JPanel createMessageLabel(MessageGroup message) {
+        JPanel messagePanel = new JPanel();
+        messagePanel.setLayout(new BorderLayout());
+
+        // Lấy thời gian tin nhắn
+        String timeStamp = new Timestamp(message.getTimestamp().getTime()).toString();
+
+        // Xử lý nội dung tin nhắn
+        String displayText;
+        if (message.isFileMessage()) {
+            // Nếu tin nhắn là tệp
+            String content = message.getContent();
+            if (content != null) {
+                String fileName = content.substring(content.lastIndexOf(File.separator) + 1);
+                displayText = String.format("<html><b>%s</b>: %s [%s]</html>", message.getSender(), fileName, timeStamp);
+                // Hiển thị tệp
+                displayFile(new File(content)); // Gọi phương thức displayFile để hiển thị tệp
+            } else {
+                displayText = String.format("<html><b>%s</b>: (Nội dung không có) [%s]</html>", message.getSender(), timeStamp);
+            }
+        } else {
+            // Nếu tin nhắn là văn bản
+            String content = message.getContent();
+            if (content != null) {
+                displayText = String.format("<html><b>%s</b>: %s [%s]</html>", message.getSender(), content, timeStamp);
+            } else {
+                displayText = String.format("<html><b>%s</b>: (Nội dung không có) [%s]</html>", message.getSender(), timeStamp);
+            }
+        }
+
+        // Tạo JLabel để hiển thị nội dung tin nhắn
+        JLabel label = new JLabel(displayText);
+        label.setHorizontalAlignment(SwingConstants.LEFT);
+
+        messagePanel.add(label, BorderLayout.WEST);
+        messagePanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); // Thêm khoảng đệm
+
+        return messagePanel;
+    }
+
+    private void displayFile(File file) {
+        JPanel fileEntry = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel fileNameLabel = new JLabel(file.getName());
+        JButton downloadButton = new JButton("Tải về");
+        downloadButton.addActionListener(e -> downloadFile(file));
+        fileEntry.add(fileNameLabel);
+        fileEntry.add(downloadButton);
+        filePanel.add(fileEntry);
+
+        // Cập nhật lại giao diện
+        filePanel.revalidate();
+        filePanel.repaint();
+    }
+
+    private void downloadFile(File file) {
+        try {
+            // Định nghĩa hành động tải tệp (ví dụ: mở tệp, tải từ server, hoặc sao chép tệp vào thư mục)
+            Desktop.getDesktop().open(file);  // Mở tệp trực tiếp
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi tải tệp: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    ////////////////////////////////////////
+    // Gửi tin nhắn
+    private void sendMessage() {
+        String message = messageField.getText();
+        if (!message.trim().isEmpty()) {
+            // Tạo đối tượng MessageGroup
+            MessageGroup messageGroup = new MessageGroup(username, message, new Timestamp(System.currentTimeMillis()), null, false);
+            try {
+                // Tạo đối tượng GroupClient và gửi tin nhắn
+                GroupClient groupClient = new GroupClient(outputStream);
+                groupClient.sendMessage(groupName, username, message, null, false);
+
+                // Xóa trường nhập sau khi gửi
+                messageField.setText("");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    private void sendFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (file.exists()) {
+                try {
+                    // Tạo đối tượng GroupClient và gửi file
+                    GroupClient groupClient = new GroupClient(outputStream);
+                    groupClient.sendFile(groupName, username, file);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+    private void sendEmoji() {
+        try {
+            // Tạo đối tượng GroupClient và gửi emoji
+            GroupClient groupClient = new GroupClient(outputStream);
+            groupClient.sendEmoji(groupName, username);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 }

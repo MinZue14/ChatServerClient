@@ -115,18 +115,6 @@ public class ServerUI {
         }).start();
     }
 
-    // Thêm ClientHandler vào danh sách
-    public void addClientHandler(String username, ClientHandler clientHandler) {
-        clients.put(username, clientHandler);
-        appendColoredLog("Người dùng " + username + " đã kết nối.", Color.GREEN);
-    }
-
-    // Xóa ClientHandler khỏi danh sách
-    public void removeClientHandler(String username) {
-        clients.remove(username);
-        appendColoredLog("Người dùng " + username + " đã ngắt kết nối.", Color.ORANGE);
-    }
-
     // Tìm ClientHandler dựa trên tên người dùng
     public ClientHandler getClientHandlerByUsername(String username) {
         return clients.get(username);
